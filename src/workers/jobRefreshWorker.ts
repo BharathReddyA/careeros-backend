@@ -45,8 +45,11 @@ export function startJobRefreshWorker(): Worker {
       const { skills, titles } = resume.parsedProfile;
       const locations = user.preferences.locations;
 
+      console.log(`Fetching jobs for user ${userId} with titles: ${titles?.join(', ')}, skills: ${skills?.slice(0,3).join(', ')}`);
       const jobs = await fetchAdzunaJobs(skills, titles, locations);
+      console.log(`Adzuna returned ${jobs.length} jobs`);
       const matched = await batchMatchJobs(jobs, resume.parsedProfile);
+      console.log(`Gemini matched ${matched.length} jobs, scores: ${matched.slice(0,5).map(m => m.match.score).join(', ')}`);
 
       for (const { job: matchedJob, match } of matched) {
         // Upsert application with match score
