@@ -31,19 +31,20 @@ export async function fetchAdzunaJobs(
   if (!appId || !appKey) throw new Error('Adzuna API credentials not set');
 
   const keywords = [...titles.slice(0, 2), ...skills.slice(0, 3)].join(' ');
-  const location = locations[0] ?? 'us';
   const country = 'us';
 
   const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/${page}`;
-  const params = {
+  const params: Record<string, unknown> = {
     app_id: appId,
     app_key: appKey,
     what: keywords,
-    where: location,
     results_per_page: resultsPerPage,
-    content_type: 'application/json',
     sort_by: 'date',
   };
+
+  // Only add 'where' if user specified an actual city/region (not empty, not a country code)
+  const city = locations[0];
+  if (city && city.length > 2) params.where = city;
 
   const { data } = await axios.get<AdzunaResponse>(url, { params });
 
