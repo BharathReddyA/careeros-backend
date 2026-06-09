@@ -1,31 +1,33 @@
 import { IParsedProfile } from '../models/Resume';
 import { IJob } from '../models/Job';
-import { scoreJobMatch, MatchResult } from './geminiService';
-
-export async function matchJobToProfile(
-  job: IJob,
-  profile: IParsedProfile
-): Promise<MatchResult> {
-  return scoreJobMatch(profile, job.title, job.company, job.description);
-}
+import { batchScoreJobs, MatchResult } from './geminiService';
 
 export async function batchMatchJobs(
   jobs: IJob[],
   profile: IParsedProfile,
-  concurrency = 5
+  chunkSize = 15
 ): Promise<Array<{ job: IJob; match: MatchResult }>> {
   const results: Array<{ job: IJob; match: MatchResult }> = [];
 
-  for (let i = 0; i < jobs.length; i += concurrency) {
-    const batch = jobs.slice(i, i + concurrency);
-    const batchResults = await Promise.allSettled(
-      batch.map(async (job) => {
-        const match = await matchJobToProfile(job, profile);
-        return { job, match };
-      })
-    );
-    for (const result of batchResults) {
-      if (result.status === 'fulfilled') results.push(result.value);
+  // Send jobs to Gemini in chunks of 15 to avoid prompt size limits
+  for (let i = 0; i < jobs.length; i += chunkSize) {
+    const chunk = jobs.slice(i, i + chunkSize);
+    try {
+      const scoreMap = await batchScoreJobs(
+        profile,
+        chunk.map((j) => ({
+          id: String(j._id),
+          title: j.title,
+          company: j.company,
+          description: j.description,
+        }))
+      );
+      for (const job of chunk) {
+        const match = scoreMap.get(String(job._id));
+        if (match) results.push({ job, match });
+      }
+    } catch (err) {
+      console.error('Batch match chunk failed:', (err as Error).message);
     }
   }
 
