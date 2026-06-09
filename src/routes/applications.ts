@@ -4,7 +4,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { Application, ApplicationStatus } from '../models/Application';
 import { Resume } from '../models/Resume';
 import { Job } from '../models/Job';
-import { matchJobToProfile } from '../services/matchingService';
+import { scoreJobMatch } from '../services/geminiService';
 
 const router = Router();
 
@@ -61,7 +61,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 
   // Score the match
-  const match = await matchJobToProfile(job, resume.parsedProfile);
+  const match = await scoreJobMatch(resume.parsedProfile, job.title, job.company, job.description);
 
   const application = await Application.create({
     userId: req.userId,
