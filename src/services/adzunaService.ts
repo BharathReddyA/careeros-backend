@@ -19,36 +19,60 @@ interface AdzunaResponse {
   count: number;
 }
 
+async function searchAdzuna(
+  appId: string,
+  appKey: string,
+  what: string,
+  city: string | undefined,
+  resultsPerPage: number
+): Promise<AdzunaJob[]> {
+  const url = `https://api.adzuna.com/v1/api/jobs/us/search/1`;
+  const params: Record<string, unknown> = {
+    app_id: appId,
+    app_key: appKey,
+    what,
+    results_per_page: resultsPerPage,
+    sort_by: 'date',
+  };
+  if (city && city.length > 2) params.where = city;
+  const { data } = await axios.get<AdzunaResponse>(url, { params });
+  return data.results ?? [];
+}
+
 export async function fetchAdzunaJobs(
   skills: string[],
   titles: string[],
   locations: string[],
-  page = 1,
-  resultsPerPage = 20
+  resultsPerPage = 10
 ): Promise<typeof Job.prototype[]> {
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
   if (!appId || !appKey) throw new Error('Adzuna API credentials not set');
 
-  const keywords = [...titles.slice(0, 2), ...skills.slice(0, 3)].join(' ');
-  const country = 'us';
-
-  const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/${page}`;
-  const params: Record<string, unknown> = {
-    app_id: appId,
-    app_key: appKey,
-    what: keywords,
-    results_per_page: resultsPerPage,
-    sort_by: 'date',
-  };
-
-  // Only add 'where' if user specified an actual city/region (not empty, not a country code)
   const city = locations[0];
-  if (city && city.length > 2) params.where = city;
 
-  const { data } = await axios.get<AdzunaResponse>(url, { params });
+  // Run separate searches: one per title + one skills-based fallback
+  const queries = [
+    ...titles.slice(0, 3).map((t) => t),
+    skills.slice(0, 3).join(' OR '),
+  ].filter(Boolean);
 
-  const upsertOps = data.results.map((job) => ({
+  const allResults: AdzunaJob[] = [];
+  const seen = new Set<string>();
+  for (const q of queries) {
+    try {
+      const results = await searchAdzuna(appId, appKey, q, city, resultsPerPage);
+      for (const r of results) {
+        if (!seen.has(r.id)) { seen.add(r.id); allResults.push(r); }
+      }
+    } catch (err) {
+      console.warn(`Adzuna query "${q}" failed:`, (err as Error).message);
+    }
+  }
+
+  if (allResults.length === 0) return [];
+
+  const upsertOps = allResults.map((job) => ({
     updateOne: {
       filter: { externalId: `adzuna_${job.id}` },
       update: {
@@ -75,8 +99,8 @@ export async function fetchAdzunaJobs(
     },
   }));
 
-  if (upsertOps.length > 0) await Job.bulkWrite(upsertOps);
+  await Job.bulkWrite(upsertOps);
 
-  const externalIds = data.results.map((j) => `adzuna_${j.id}`);
+  const externalIds = allResults.map((j) => `adzuna_${j.id}`);
   return Job.find({ externalId: { $in: externalIds } });
 }
