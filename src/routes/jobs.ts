@@ -56,11 +56,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 });
 
 router.post('/refresh', authMiddleware, async (req: AuthRequest, res: Response) => {
-  await getRefreshQueue().add(
-    'refresh',
-    { userId: req.userId! },
-    { jobId: `refresh_${req.userId}` }
-  );
+  await getRefreshQueue().add('refresh', { userId: req.userId! });
   res.json({ message: 'Job refresh queued' });
 });
 

@@ -48,11 +48,14 @@ async function bootstrap(): Promise<void> {
   await connectDB();
   initCloudinary();
 
-  // Clear stale failed/delayed resume jobs that predate the pdfBufferBase64 fix
+  // Clear stale failed/delayed jobs on startup
   const resumeQueue = new Queue<ResumeJobData>(RESUME_QUEUE, { connection: getRedisOptions() });
   await resumeQueue.obliterate({ force: true });
   await resumeQueue.close();
-  console.log('Cleared stale resume-parse queue jobs');
+  const jobRefreshQ = new Queue(JOB_REFRESH_QUEUE, { connection: getRedisOptions() });
+  await jobRefreshQ.obliterate({ force: true });
+  await jobRefreshQ.close();
+  console.log('Cleared stale queue jobs');
 
   // Start BullMQ workers
   startResumeWorker();
