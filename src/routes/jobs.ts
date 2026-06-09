@@ -22,8 +22,8 @@ router.get('/feed', authMiddleware, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  // Return existing matched applications with job data
-  const applications = await Application.find({ userId: req.userId })
+  // Return applications linked to the current active resume only
+  const applications = await Application.find({ userId: req.userId, resumeId: resume._id })
     .populate('jobId')
     .sort({ matchScore: -1 })
     .limit(50);
