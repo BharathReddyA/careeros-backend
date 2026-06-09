@@ -17,7 +17,7 @@ import jobsRouter from './routes/jobs';
 import applicationsRouter from './routes/applications';
 import generateRouter from './routes/generate';
 
-import { startResumeWorker } from './workers/resumeWorker';
+import { startResumeWorker, RESUME_QUEUE, ResumeJobData } from './workers/resumeWorker';
 import { startJobRefreshWorker, JOB_REFRESH_QUEUE, JobRefreshData } from './workers/jobRefreshWorker';
 import { startNotifyWorker } from './workers/notifyWorker';
 import { User } from './models/User';
@@ -47,6 +47,12 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 async function bootstrap(): Promise<void> {
   await connectDB();
   initCloudinary();
+
+  // Clear stale failed/delayed resume jobs that predate the pdfBufferBase64 fix
+  const resumeQueue = new Queue<ResumeJobData>(RESUME_QUEUE, { connection: getRedisOptions() });
+  await resumeQueue.obliterate({ force: true });
+  await resumeQueue.close();
+  console.log('Cleared stale resume-parse queue jobs');
 
   // Start BullMQ workers
   startResumeWorker();

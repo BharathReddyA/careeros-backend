@@ -20,7 +20,7 @@ router.post(
   uploadResume.single('resume'),
   streamToCloudinary,
   async (req: AuthRequest, res: Response) => {
-    const file = req.file as Express.Multer.File & { path: string };
+    const file = req.file as Express.Multer.File & { path: string; pdfBuffer?: Buffer };
     if (!file) {
       res.status(400).json({ error: 'No file uploaded' });
       return;
@@ -35,6 +35,7 @@ router.post(
     await getResumeQueue().add('parse', {
       resumeId: String(resume._id),
       cloudinaryUrl: file.path,
+      pdfBufferBase64: file.pdfBuffer?.toString('base64'),
     });
 
     res.status(202).json({

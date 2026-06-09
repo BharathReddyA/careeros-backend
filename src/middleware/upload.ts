@@ -27,10 +27,15 @@ export function streamToCloudinary(req: Request, res: Response, next: NextFuncti
     return;
   }
 
+  // Attach buffer so the worker can parse it directly without re-downloading
+  (req.file as Express.Multer.File & { path: string; pdfBuffer: Buffer }).pdfBuffer = file.buffer;
+
   const uploadStream = cloudinary.uploader.upload_stream(
     {
       folder: 'careeros/resumes',
       resource_type: 'raw',
+      type: 'upload',
+      access_mode: 'public',
       format: 'pdf',
     },
     (error, result) => {
@@ -38,7 +43,6 @@ export function streamToCloudinary(req: Request, res: Response, next: NextFuncti
         res.status(500).json({ error: 'Failed to upload to Cloudinary' });
         return;
       }
-      // Attach the secure URL so the route handler can use file.path
       (req.file as Express.Multer.File & { path: string }).path = result.secure_url;
       next();
     }
