@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { Queue } from 'bullmq';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { uploadResume } from '../middleware/upload';
+import { uploadResume, streamToCloudinary } from '../middleware/upload';
 import { Resume } from '../models/Resume';
 import { getRedisOptions } from '../lib/redis';
 import { RESUME_QUEUE, ResumeJobData } from '../workers/resumeWorker';
@@ -18,6 +18,7 @@ router.post(
   '/upload',
   authMiddleware,
   uploadResume.single('resume'),
+  streamToCloudinary,
   async (req: AuthRequest, res: Response) => {
     const file = req.file as Express.Multer.File & { path: string };
     if (!file) {
