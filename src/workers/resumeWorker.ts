@@ -3,6 +3,7 @@ import pdfParse from 'pdf-parse';
 import { getRedisOptions } from '../lib/redis';
 import { Resume } from '../models/Resume';
 import { parseResume } from '../services/geminiService';
+import { trackTokenUsage } from '../lib/tokenUsage';
 
 export const RESUME_QUEUE = 'resume-parse';
 
@@ -34,7 +35,12 @@ export function startResumeWorker(): Worker {
       const parsed = await pdfParse(pdfBuffer);
       const rawText = parsed.text;
 
-      const parsedProfile = await parseResume(rawText);
+      const resumeDoc = await Resume.findById(resumeId);
+      if (!resumeDoc) {
+        throw new Error(`Resume ${resumeId} not found`);
+      }
+
+      const parsedProfile = await parseResume(rawText, trackTokenUsage(String(resumeDoc.userId)));
 
       // Flatten any object arrays Gemini may return
       if (parsedProfile.education?.length) parsedProfile.education = flatten(parsedProfile.education as unknown[]);
@@ -48,13 +54,10 @@ export function startResumeWorker(): Worker {
         isActive: true,
       });
 
-      const resume = await Resume.findById(resumeId);
-      if (resume) {
-        await Resume.updateMany(
-          { userId: resume.userId, _id: { $ne: resumeId } },
-          { isActive: false }
-        );
-      }
+      await Resume.updateMany(
+        { userId: resumeDoc.userId, _id: { $ne: resumeId } },
+        { isActive: false }
+      );
 
       console.log(`Resume ${resumeId} parsed successfully`);
       return { resumeId, parsedProfile };

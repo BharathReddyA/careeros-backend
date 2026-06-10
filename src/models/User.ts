@@ -7,6 +7,8 @@ export interface IUser extends Document {
   fcmToken: string;
   revenueCatId: string;
   isPro: boolean;
+  profilePhotoUrl: string;
+  tokensUsed: number;
   preferences: {
     jobTypes: string[];
     locations: string[];
@@ -23,6 +25,8 @@ const UserSchema = new Schema<IUser>(
     fcmToken: { type: String, default: '' },
     revenueCatId: { type: String, default: '' },
     isPro: { type: Boolean, default: false },
+    profilePhotoUrl: { type: String, default: '' },
+    tokensUsed: { type: Number, default: 0 },
     preferences: {
       jobTypes: { type: [String], default: ['full-time'] },
       locations: { type: [String], default: [] },

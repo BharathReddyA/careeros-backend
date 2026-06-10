@@ -1,11 +1,12 @@
 import { IParsedProfile } from '../models/Resume';
 import { IJob } from '../models/Job';
-import { batchScoreJobs, MatchResult } from './geminiService';
+import { batchScoreJobs, MatchResult, UsageCallback } from './geminiService';
 
 export async function batchMatchJobs(
   jobs: IJob[],
   profile: IParsedProfile,
-  chunkSize = 15
+  chunkSize = 15,
+  onUsage?: UsageCallback
 ): Promise<Array<{ job: IJob; match: MatchResult }>> {
   const results: Array<{ job: IJob; match: MatchResult }> = [];
 
@@ -20,7 +21,8 @@ export async function batchMatchJobs(
           title: j.title,
           company: j.company,
           description: j.description,
-        }))
+        })),
+        onUsage
       );
       for (const job of chunk) {
         const match = scoreMap.get(String(job._id));

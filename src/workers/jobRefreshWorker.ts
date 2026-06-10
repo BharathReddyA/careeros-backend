@@ -5,6 +5,7 @@ import { Resume } from '../models/Resume';
 import { fetchAdzunaJobs } from '../services/adzunaService';
 import { batchMatchJobs } from '../services/matchingService';
 import { Application } from '../models/Application';
+import { trackTokenUsage } from '../lib/tokenUsage';
 
 export const JOB_REFRESH_QUEUE = 'job-refresh';
 export const NOTIFY_QUEUE = 'notify';
@@ -48,7 +49,7 @@ export function startJobRefreshWorker(): Worker {
       console.log(`Fetching jobs for user ${userId} with titles: ${titles?.join(', ')}, skills: ${skills?.slice(0,3).join(', ')}`);
       const jobs = await fetchAdzunaJobs(skills, titles, locations);
       console.log(`Adzuna returned ${jobs.length} jobs`);
-      const matched = await batchMatchJobs(jobs, resume.parsedProfile);
+      const matched = await batchMatchJobs(jobs, resume.parsedProfile, 15, trackTokenUsage(userId));
       console.log(`Gemini matched ${matched.length} jobs, scores: ${matched.slice(0,5).map(m => m.match.score).join(', ')}`);
 
       for (const { job: matchedJob, match } of matched) {

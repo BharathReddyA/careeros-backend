@@ -5,6 +5,7 @@ import { Application, ApplicationStatus } from '../models/Application';
 import { Resume } from '../models/Resume';
 import { Job } from '../models/Job';
 import { scoreJobMatch } from '../services/geminiService';
+import { trackTokenUsage } from '../lib/tokenUsage';
 
 const router = Router();
 
@@ -61,7 +62,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 
   // Score the match
-  const match = await scoreJobMatch(resume.parsedProfile, job.title, job.company, job.description);
+  const match = await scoreJobMatch(resume.parsedProfile, job.title, job.company, job.description, trackTokenUsage(req.userId!));
 
   const application = await Application.create({
     userId: req.userId,

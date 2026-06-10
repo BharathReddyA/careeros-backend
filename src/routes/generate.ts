@@ -6,6 +6,7 @@ import { Resume } from '../models/Resume';
 import { Job } from '../models/Job';
 import { User } from '../models/User';
 import { tailorResume, generateCoverLetter } from '../services/geminiService';
+import { trackTokenUsage } from '../lib/tokenUsage';
 
 const router = Router();
 
@@ -83,7 +84,7 @@ router.post('/tailor', authMiddleware, async (req: AuthRequest, res: Response) =
     await application.save();
   }
 
-  const tailoredText = await tailorResume(resume.rawText, job.description);
+  const tailoredText = await tailorResume(resume.rawText, job.description, trackTokenUsage(userId));
 
   application.tailoredResumeText = tailoredText;
   application.status = 'ready';
@@ -140,7 +141,8 @@ router.post('/coverletter', authMiddleware, async (req: AuthRequest, res: Respon
     skills,
     job.title,
     job.company,
-    job.description
+    job.description,
+    trackTokenUsage(userId)
   );
 
   application.coverLetter = coverLetter;
