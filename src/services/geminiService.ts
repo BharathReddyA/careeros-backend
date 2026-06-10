@@ -147,6 +147,91 @@ Return the full rewritten resume as plain text only.`;
   return result.response.text().trim();
 }
 
+export interface InterviewQuestion {
+  text: string;
+  category: string;
+}
+
+export async function generateInterviewQuestions(
+  candidateProfile: IParsedProfile,
+  roleTitle: string,
+  jobDescription?: string,
+  onUsage?: UsageCallback
+): Promise<InterviewQuestion[]> {
+  const prompt = `You are an experienced interview coach. Generate 5 mock interview questions for this candidate, tailored to their background and the target role.
+
+CANDIDATE PROFILE:
+Skills: ${candidateProfile.skills?.join(', ')}
+Titles: ${candidateProfile.titles?.join(', ')}
+Experience: ${candidateProfile.experienceYears} years
+Industries: ${candidateProfile.industries?.join(', ')}
+Summary: ${candidateProfile.summary}
+
+TARGET ROLE: ${roleTitle}
+${jobDescription ? `JOB DESCRIPTION: ${jobDescription.slice(0, 1000)}` : ''}
+
+Generate a mix of behavioral, situational, and role-specific technical questions. Return ONLY a valid JSON array of exactly 5 items:
+[{"text": "question text", "category": "behavioral|technical|situational"}, ...]`;
+
+  return generateJSON<InterviewQuestion[]>(prompt, onUsage);
+}
+
+export interface AnswerFeedback {
+  score: number;
+  feedback: string;
+  strengths: string[];
+  improvements: string[];
+}
+
+export async function gradeInterviewAnswer(
+  question: string,
+  transcript: string,
+  candidateProfile: IParsedProfile,
+  onUsage?: UsageCallback
+): Promise<AnswerFeedback> {
+  const prompt = `You are an experienced interview coach grading a candidate's spoken answer.
+
+CANDIDATE PROFILE:
+Titles: ${candidateProfile.titles?.join(', ')}
+Experience: ${candidateProfile.experienceYears} years
+
+INTERVIEW QUESTION:
+${question}
+
+CANDIDATE'S TRANSCRIBED ANSWER:
+"${transcript}"
+
+If the transcribed answer is empty, very short, or appears to be silence/noise (e.g. fewer than 5 meaningful words), return a score of 0 and feedback explaining no answer was detected and to try recording again.
+
+Otherwise, grade the answer on clarity, structure, relevance, and depth. Provide constructive, specific feedback.
+
+Return ONLY a valid JSON object:
+{"score": 0, "feedback": "2-4 sentences of constructive feedback", "strengths": ["strength 1", "strength 2"], "improvements": ["improvement 1", "improvement 2"]}`;
+
+  return generateJSON<AnswerFeedback>(prompt, onUsage);
+}
+
+export async function generateOverallInterviewFeedback(
+  questions: Array<{ text: string; transcript: string; score: number; feedback: string }>,
+  roleTitle: string,
+  onUsage?: UsageCallback
+): Promise<string> {
+  const summary = questions
+    .map((q, i) => `Q${i + 1} (score ${q.score}): ${q.text}\nAnswer: ${q.transcript}\nFeedback: ${q.feedback}`)
+    .join('\n\n');
+
+  const prompt = `You are an experienced interview coach. The candidate just completed a mock interview for the role of "${roleTitle}". Here is a summary of each question, their answer, score, and per-question feedback:
+
+${summary}
+
+Write a 3-5 sentence overall summary of the candidate's performance, highlighting overall strengths and the most important areas to improve before a real interview. Return plain text only.`;
+
+  const model = getModel();
+  const result = await model.generateContent(prompt);
+  await reportUsage(result.response.usageMetadata?.totalTokenCount, onUsage);
+  return result.response.text().trim();
+}
+
 export async function generateCoverLetter(
   candidateName: string,
   candidateSummary: string,

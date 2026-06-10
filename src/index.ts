@@ -16,6 +16,7 @@ import resumeRouter from './routes/resume';
 import jobsRouter from './routes/jobs';
 import applicationsRouter from './routes/applications';
 import generateRouter from './routes/generate';
+import coachingRouter from './routes/coaching';
 
 import { startResumeWorker, RESUME_QUEUE, ResumeJobData } from './workers/resumeWorker';
 import { startJobRefreshWorker, JOB_REFRESH_QUEUE, JobRefreshData } from './workers/jobRefreshWorker';
@@ -37,6 +38,7 @@ app.use('/resume', resumeRouter);
 app.use('/jobs', jobsRouter);
 app.use('/applications', applicationsRouter);
 app.use('/generate', generateRouter);
+app.use('/coaching', coachingRouter);
 
 // Global error handler
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

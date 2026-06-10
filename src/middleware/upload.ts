@@ -7,7 +7,7 @@ const memStorage = multer.memoryStorage();
 interface UploaderOptions {
   allowedMimeTypes: string[];
   folder: string;
-  resourceType: 'raw' | 'image';
+  resourceType: 'raw' | 'image' | 'video';
   format?: string;
 }
 
@@ -75,3 +75,12 @@ const imageUploader = makeCloudinaryUploader({
 
 export const uploadImage = imageUploader.multer;
 export const streamImageToCloudinary = imageUploader.streamToCloudinary;
+
+const audioUploader = makeCloudinaryUploader({
+  allowedMimeTypes: ['audio/m4a', 'audio/mp4', 'audio/x-m4a', 'audio/wav', 'audio/mpeg', 'audio/aac', 'audio/3gpp'],
+  folder: 'careeros/coaching-audio',
+  resourceType: 'video',
+});
+
+export const uploadAudio = audioUploader.multer;
+export const streamAudioToCloudinary = audioUploader.streamToCloudinary;
