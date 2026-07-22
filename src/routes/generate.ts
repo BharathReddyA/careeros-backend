@@ -74,6 +74,10 @@ router.post('/tailor', authMiddleware, async (req: AuthRequest, res: Response) =
     res.status(404).json({ error: 'Job not found' });
     return;
   }
+  if (resume.rawText.trim().length < 50) {
+    res.status(400).json({ error: 'This resume failed to parse and has no usable content. Delete it and re-upload the file.' });
+    return;
+  }
 
   // Get or create application
   let application = await Application.findOne({ userId, jobId, resumeId });
