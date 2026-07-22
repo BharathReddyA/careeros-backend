@@ -71,7 +71,7 @@ router.post('/tailor', authMiddleware, async (req: AuthRequest, res: Response) =
   }
 
   // Get or create application
-  let application = await Application.findOne({ userId, jobId });
+  let application = await Application.findOne({ userId, jobId, resumeId });
   if (!application) {
     application = await Application.create({
       userId,
@@ -126,9 +126,9 @@ router.post('/coverletter', authMiddleware, async (req: AuthRequest, res: Respon
     return;
   }
 
-  const resume = await Resume.findOne({ userId, isActive: true });
+  const resume = await Resume.findOne({ _id: application.resumeId, userId });
   if (!resume) {
-    res.status(404).json({ error: 'No active resume found' });
+    res.status(404).json({ error: 'Resume for this application not found' });
     return;
   }
 

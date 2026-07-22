@@ -46,6 +46,8 @@ const ApplicationSchema = new Schema<IApplication>(
 );
 
 ApplicationSchema.index({ userId: 1, status: 1 });
-ApplicationSchema.index({ userId: 1, jobId: 1 }, { unique: true });
+// Scoped by resume, not just job — the same job can be matched independently by
+// multiple resumes, each with its own score/tailoring, so each combination gets its own row.
+ApplicationSchema.index({ userId: 1, jobId: 1, resumeId: 1 }, { unique: true });
 
 export const Application = mongoose.model<IApplication>('Application', ApplicationSchema);

@@ -4,6 +4,7 @@ dotenv.config();
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import cron from 'node-cron';
 import { Queue } from 'bullmq';
 
@@ -27,6 +28,7 @@ import { Resume } from './models/Resume';
 const app = express();
 const PORT = process.env.PORT ?? 3000;
 
+app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -43,21 +45,13 @@ app.use('/coaching', coachingRouter);
 // Global error handler
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);
-  res.status(500).json({ error: err.message ?? 'Internal server error' });
+  const isProd = process.env.NODE_ENV === 'production';
+  res.status(500).json({ error: isProd ? 'Internal server error' : err.message });
 });
 
 async function bootstrap(): Promise<void> {
   await connectDB();
   initCloudinary();
-
-  // Clear stale failed/delayed jobs on startup
-  const resumeQueue = new Queue<ResumeJobData>(RESUME_QUEUE, { connection: getRedisOptions() });
-  await resumeQueue.obliterate({ force: true });
-  await resumeQueue.close();
-  const jobRefreshQ = new Queue(JOB_REFRESH_QUEUE, { connection: getRedisOptions() });
-  await jobRefreshQ.obliterate({ force: true });
-  await jobRefreshQ.close();
-  console.log('Cleared stale queue jobs');
 
   // Start BullMQ workers
   startResumeWorker();

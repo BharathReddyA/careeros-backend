@@ -1,19 +1,44 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { User } from '../models/User';
 import { Resume } from '../models/Resume';
 import { Application } from '../models/Application';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { uploadImage, streamImageToCloudinary } from '../middleware/upload';
+import { sendOtp, checkOtp } from '../lib/twilio';
 
 const router = Router();
 
-const RegisterSchema = z.object({
+// Brute-force protection: credential-guessing endpoints only.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please try again later.' },
+});
+
+// OTP endpoints hit Twilio (billed per SMS) — tighter limit.
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please try again later.' },
+});
+
+const PhoneSchema = z.object({
+  phone: z.string().regex(/^\+[1-9]\d{6,14}$/, 'Phone must be in E.164 format, e.g. +14155552671'),
+});
+
+const RegisterSchema = PhoneSchema.extend({
   email: z.string().email(),
   password: z.string().min(8),
   name: z.string().min(1),
+  otp: z.string().min(4),
 });
 
 const LoginSchema = z.object({
@@ -30,20 +55,46 @@ const DeleteAccountSchema = z.object({
   password: z.string(),
 });
 
+const VerifyPhoneSchema = PhoneSchema.extend({
+  otp: z.string().min(4),
+});
+
+const ForgotPasswordResetSchema = PhoneSchema.extend({
+  otp: z.string().min(4),
+  newPassword: z.string().min(8),
+});
+
 function signToken(userId: string): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET not set');
   return jwt.sign({ userId }, secret, { expiresIn: '30d' });
 }
 
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register/send-otp', otpLimiter, async (req: Request, res: Response) => {
+  const parsed = PhoneSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const existingPhone = await User.findOne({ phone: parsed.data.phone, phoneVerified: true });
+  if (existingPhone) {
+    res.status(409).json({ error: 'Phone number already registered' });
+    return;
+  }
+
+  await sendOtp(parsed.data.phone);
+  res.json({ message: 'OTP sent' });
+});
+
+router.post('/register', authLimiter, async (req: Request, res: Response) => {
   const parsed = RegisterSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
 
-  const { email, password, name } = parsed.data;
+  const { email, password, name, phone, otp } = parsed.data;
 
   const existing = await User.findOne({ email });
   if (existing) {
@@ -51,8 +102,20 @@ router.post('/register', async (req: Request, res: Response) => {
     return;
   }
 
+  const existingPhone = await User.findOne({ phone, phoneVerified: true });
+  if (existingPhone) {
+    res.status(409).json({ error: 'Phone number already registered' });
+    return;
+  }
+
+  const approved = await checkOtp(phone, otp);
+  if (!approved) {
+    res.status(400).json({ error: 'Incorrect or expired code' });
+    return;
+  }
+
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await User.create({ email, passwordHash, name });
+  const user = await User.create({ email, passwordHash, name, phone, phoneVerified: true });
   const token = signToken(String(user._id));
 
   res.status(201).json({
@@ -61,7 +124,7 @@ router.post('/register', async (req: Request, res: Response) => {
   });
 });
 
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', authLimiter, async (req: Request, res: Response) => {
   const parsed = LoginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -132,7 +195,7 @@ router.post(
   }
 );
 
-router.post('/reset-password', authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/reset-password', authLimiter, authMiddleware, async (req: AuthRequest, res: Response) => {
   const parsed = ResetPasswordSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -154,6 +217,89 @@ router.post('/reset-password', authMiddleware, async (req: AuthRequest, res: Res
   }
 
   user.passwordHash = await bcrypt.hash(newPassword, 12);
+  await user.save();
+
+  res.json({ message: 'Password updated' });
+});
+
+// ── Recovery phone: add + verify while logged in ──────────────────────────
+
+router.post('/phone/send-otp', otpLimiter, authMiddleware, async (req: AuthRequest, res: Response) => {
+  const parsed = PhoneSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const existing = await User.findOne({ phone: parsed.data.phone, phoneVerified: true, _id: { $ne: req.userId } });
+  if (existing) {
+    res.status(409).json({ error: 'Phone number already registered to another account' });
+    return;
+  }
+
+  await sendOtp(parsed.data.phone);
+  res.json({ message: 'OTP sent' });
+});
+
+router.post('/phone/verify', otpLimiter, authMiddleware, async (req: AuthRequest, res: Response) => {
+  const parsed = VerifyPhoneSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const approved = await checkOtp(parsed.data.phone, parsed.data.otp);
+  if (!approved) {
+    res.status(400).json({ error: 'Incorrect or expired code' });
+    return;
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.userId,
+    { phone: parsed.data.phone, phoneVerified: true },
+    { new: true }
+  ).select('-passwordHash');
+
+  res.json({ user });
+});
+
+// ── Forgot password via SMS OTP (no auth — user is locked out) ────────────
+
+router.post('/forgot-password/send-otp', otpLimiter, async (req: Request, res: Response) => {
+  const parsed = PhoneSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const user = await User.findOne({ phone: parsed.data.phone, phoneVerified: true });
+  // Always respond the same way, verified phone or not, to avoid leaking which numbers are registered.
+  if (user) {
+    await sendOtp(parsed.data.phone);
+  }
+  res.json({ message: 'If that phone number is registered, a code has been sent.' });
+});
+
+router.post('/forgot-password/reset', otpLimiter, async (req: Request, res: Response) => {
+  const parsed = ForgotPasswordResetSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const user = await User.findOne({ phone: parsed.data.phone, phoneVerified: true });
+  if (!user) {
+    res.status(400).json({ error: 'Incorrect or expired code' });
+    return;
+  }
+
+  const approved = await checkOtp(parsed.data.phone, parsed.data.otp);
+  if (!approved) {
+    res.status(400).json({ error: 'Incorrect or expired code' });
+    return;
+  }
+
+  user.passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
   await user.save();
 
   res.json({ message: 'Password updated' });

@@ -9,6 +9,8 @@ export interface IUser extends Document {
   isPro: boolean;
   profilePhotoUrl: string;
   tokensUsed: number;
+  phone: string;
+  phoneVerified: boolean;
   preferences: {
     jobTypes: string[];
     locations: string[];
@@ -27,6 +29,8 @@ const UserSchema = new Schema<IUser>(
     isPro: { type: Boolean, default: false },
     profilePhotoUrl: { type: String, default: '' },
     tokensUsed: { type: Number, default: 0 },
+    phone: { type: String, default: '', index: true },
+    phoneVerified: { type: Boolean, default: false },
     preferences: {
       jobTypes: { type: [String], default: ['full-time'] },
       locations: { type: [String], default: [] },

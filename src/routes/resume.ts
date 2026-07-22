@@ -29,6 +29,7 @@ router.post(
     const resume = await Resume.create({
       userId: req.userId,
       cloudinaryUrl: file.path,
+      filename: file.originalname,
       isActive: false,
     });
 
@@ -57,6 +58,13 @@ router.get('/active', authMiddleware, async (req: AuthRequest, res: Response) =>
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
   const resumes = await Resume.find({ userId: req.userId }).sort({ createdAt: -1 });
   res.json({ resumes });
+});
+
+// POST (not DELETE) so it can be fired from navigator.sendBeacon() on page unload.
+// Only cancels resumes still mid-parse — never touches an already-active resume.
+router.post('/:id/cancel', authMiddleware, async (req: AuthRequest, res: Response) => {
+  await Resume.findOneAndDelete({ _id: req.params.id, userId: req.userId, isActive: false });
+  res.json({ message: 'Cancelled' });
 });
 
 router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {

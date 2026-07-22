@@ -55,7 +55,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  const existing = await Application.findOne({ userId: req.userId, jobId });
+  const existing = await Application.findOne({ userId: req.userId, jobId, resumeId: resume._id });
   if (existing) {
     res.status(409).json({ error: 'Already saved this job', application: existing });
     return;

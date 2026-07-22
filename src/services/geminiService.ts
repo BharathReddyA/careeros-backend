@@ -15,7 +15,21 @@ function getClient(): GoogleGenerativeAI {
 }
 
 function getModel() {
-  return getClient().getGenerativeModel({ model: 'gemini-2.5-flash' });
+  return getClient().getGenerativeModel({ model: 'gemini-flash-latest' });
+}
+
+const STYLE_GUIDE =
+  'Write in a natural, human, conversational tone — the way a thoughtful person writes, not a corporate AI. ' +
+  'Never use em dashes or double hyphens (— or --); use a comma, period, or "and"/"but" instead.';
+
+/** Safety net in case the model ignores the style instruction. */
+function humanize(text: string): string {
+  return text
+    .replace(/\s*--\s*/g, ', ')
+    .replace(/\s*[—–]\s*/g, ', ')
+    .replace(/,\s*,/g, ',')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 async function reportUsage(tokens: number | undefined, onUsage?: UsageCallback): Promise<void> {
@@ -29,12 +43,19 @@ async function reportUsage(tokens: number | undefined, onUsage?: UsageCallback):
 
 async function generateJSON<T>(prompt: string, onUsage?: UsageCallback): Promise<T> {
   const model = getModel();
-  const result = await model.generateContent(prompt);
+  const result = await model.generateContent(`${prompt}\n\nFor any free-text field: ${STYLE_GUIDE}`);
   await reportUsage(result.response.usageMetadata?.totalTokenCount, onUsage);
   const text = result.response.text().trim();
   // Strip markdown code fences if present
   const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
   return JSON.parse(cleaned) as T;
+}
+
+async function generateText(prompt: string, onUsage?: UsageCallback): Promise<string> {
+  const model = getModel();
+  const result = await model.generateContent(`${prompt}\n\n${STYLE_GUIDE}`);
+  await reportUsage(result.response.usageMetadata?.totalTokenCount, onUsage);
+  return humanize(result.response.text().trim());
 }
 
 export async function parseResume(resumeText: string, onUsage?: UsageCallback): Promise<IParsedProfile> {
@@ -128,10 +149,12 @@ Return ONLY a valid JSON array — one entry per job in the same order:
 
 export async function tailorResume(resumeText: string, jobDescription: string, onUsage?: UsageCallback): Promise<string> {
   const prompt = `You are an expert resume writer. Rewrite this resume to better match the job description below.
-- Keep all facts truthful — only reframe and reorder
+- Keep all facts truthful, only reframe and reorder
 - Add relevant keywords from the job description naturally
 - Strengthen bullet points with measurable impact where possible
 - Do not invent experience or skills
+- Never use em dashes or double hyphens (— or --) anywhere in the resume; use a comma or period instead
+- Write every line the way a person would actually write their own resume, not the way an AI summarizes one
 
 ORIGINAL RESUME:
 ${resumeText}
@@ -141,10 +164,7 @@ ${jobDescription}
 
 Return the full rewritten resume as plain text only.`;
 
-  const model = getModel();
-  const result = await model.generateContent(prompt);
-  await reportUsage(result.response.usageMetadata?.totalTokenCount, onUsage);
-  return result.response.text().trim();
+  return generateText(prompt, onUsage);
 }
 
 export interface InterviewQuestion {
@@ -226,10 +246,7 @@ ${summary}
 
 Write a 3-5 sentence overall summary of the candidate's performance, highlighting overall strengths and the most important areas to improve before a real interview. Return plain text only.`;
 
-  const model = getModel();
-  const result = await model.generateContent(prompt);
-  await reportUsage(result.response.usageMetadata?.totalTokenCount, onUsage);
-  return result.response.text().trim();
+  return generateText(prompt, onUsage);
 }
 
 export async function generateCoverLetter(
@@ -255,8 +272,5 @@ JOB DESCRIPTION: ${jobDescription}
 
 Return plain text only, no subject line, no date, no address block.`;
 
-  const model = getModel();
-  const result = await model.generateContent(prompt);
-  await reportUsage(result.response.usageMetadata?.totalTokenCount, onUsage);
-  return result.response.text().trim();
+  return generateText(prompt, onUsage);
 }

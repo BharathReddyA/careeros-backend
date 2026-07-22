@@ -4,6 +4,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { Resume } from '../models/Resume';
 import { Application } from '../models/Application';
 import { Job } from '../models/Job';
+import { JobView } from '../models/JobView';
 import { getRedisOptions } from '../lib/redis';
 import { JOB_REFRESH_QUEUE, JobRefreshData } from '../workers/jobRefreshWorker';
 
@@ -15,8 +16,17 @@ function getRefreshQueue(): Queue<JobRefreshData> {
   return refreshQueue;
 }
 
+// General listing — no resume required, used before a user has uploaded one.
+router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
+  const jobs = await Job.find({}).sort({ postedAt: -1 }).limit(50);
+  res.json({ jobs });
+});
+
 router.get('/feed', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const resume = await Resume.findOne({ userId: req.userId, isActive: true });
+  const { resumeId } = req.query;
+  const resume = resumeId
+    ? await Resume.findOne({ _id: resumeId as string, userId: req.userId })
+    : await Resume.findOne({ userId: req.userId, isActive: true });
   if (!resume) {
     res.status(404).json({ error: 'No active resume. Upload a resume first.' });
     return;
@@ -39,6 +49,12 @@ router.get('/feed', authMiddleware, async (req: AuthRequest, res: Response) => {
   res.json({ feed, resumeId: resume._id });
 });
 
+router.get('/viewed', authMiddleware, async (req: AuthRequest, res: Response) => {
+  const views = await JobView.find({ userId: req.userId }).sort({ viewedAt: -1 }).limit(50).populate('jobId');
+  const jobs = views.filter((v) => v.jobId).map((v) => v.jobId);
+  res.json({ jobs });
+});
+
 router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   const job = await Job.findById(req.params.id);
   if (!job) {
@@ -52,11 +68,18 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     jobId: job._id,
   });
 
+  await JobView.findOneAndUpdate(
+    { userId: req.userId, jobId: job._id },
+    { viewedAt: new Date() },
+    { upsert: true }
+  );
+
   res.json({ job, application });
 });
 
 router.post('/refresh', authMiddleware, async (req: AuthRequest, res: Response) => {
-  await getRefreshQueue().add('refresh', { userId: req.userId! });
+  const { resumeId } = req.body ?? {};
+  await getRefreshQueue().add('refresh', { userId: req.userId!, resumeId });
   res.json({ message: 'Job refresh queued' });
 });
 

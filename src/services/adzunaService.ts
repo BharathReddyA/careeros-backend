@@ -19,6 +19,8 @@ interface AdzunaResponse {
   count: number;
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function searchAdzuna(
   appId: string,
   appKey: string,
@@ -35,8 +37,22 @@ async function searchAdzuna(
     sort_by: 'date',
   };
   if (city && city.length > 2) params.where = city;
-  const { data } = await axios.get<AdzunaResponse>(url, { params });
-  return data.results ?? [];
+
+  // Adzuna intermittently 503s under light rate-limiting — a couple of short retries
+  // clears most of these without meaningfully slowing down the refresh.
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const { data } = await axios.get<AdzunaResponse>(url, { params });
+      return data.results ?? [];
+    } catch (err) {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      const retryable = status === undefined || status === 503 || status === 429;
+      if (!retryable || attempt === maxAttempts) throw err;
+      await sleep(400 * attempt);
+    }
+  }
+  return [];
 }
 
 export async function fetchAdzunaJobs(

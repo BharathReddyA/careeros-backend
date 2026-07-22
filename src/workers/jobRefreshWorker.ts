@@ -12,6 +12,7 @@ export const NOTIFY_QUEUE = 'notify';
 
 export interface JobRefreshData {
   userId: string;
+  resumeId?: string;
 }
 
 export interface NotifyJobData {
@@ -35,12 +36,14 @@ export function startJobRefreshWorker(): Worker {
   const worker = new Worker<JobRefreshData>(
     JOB_REFRESH_QUEUE,
     async (job: Job<JobRefreshData>) => {
-      const { userId } = job.data;
+      const { userId, resumeId } = job.data;
 
       const user = await User.findById(userId);
       if (!user) return;
 
-      const resume = await Resume.findOne({ userId, isActive: true });
+      const resume = resumeId
+        ? await Resume.findOne({ _id: resumeId, userId })
+        : await Resume.findOne({ userId, isActive: true });
       if (!resume?.parsedProfile?.skills?.length) return;
 
       const { skills, titles } = resume.parsedProfile;
@@ -57,6 +60,7 @@ export function startJobRefreshWorker(): Worker {
         const existing = await Application.findOne({
           userId,
           jobId: matchedJob._id,
+          resumeId: resume._id,
         });
 
         if (!existing) {

@@ -16,6 +16,7 @@ export interface IParsedProfile {
 export interface IResume extends Document {
   userId: Types.ObjectId;
   cloudinaryUrl: string;
+  filename: string;
   rawText: string;
   parsedProfile: IParsedProfile;
   isActive: boolean;
@@ -42,6 +43,7 @@ const ResumeSchema = new Schema<IResume>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     cloudinaryUrl: { type: String, required: true },
+    filename: { type: String, default: '' },
     rawText: { type: String, default: '' },
     parsedProfile: { type: ParsedProfileSchema, default: () => ({}) },
     isActive: { type: Boolean, default: false },
