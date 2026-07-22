@@ -149,10 +149,25 @@ Return ONLY a valid JSON array — one entry per job in the same order:
 
 export async function tailorResume(resumeText: string, jobDescription: string, onUsage?: UsageCallback): Promise<string> {
   const prompt = `You are an expert resume writer. Rewrite this resume to better match the job description below.
-- Keep all facts truthful, only reframe and reorder
-- Add relevant keywords from the job description naturally
-- Strengthen bullet points with measurable impact where possible
-- Do not invent experience or skills
+
+NEVER CHANGE these facts — copy them exactly as they appear in the original resume:
+- Full name and contact info (email, phone, location, links)
+- Company / employer names
+- Official job titles actually held
+- Employment dates and timeline (start/end dates, ordering of roles)
+- Education institutions, degrees, and graduation dates
+- Certifications and their issuing bodies/dates
+
+YOU MAY rewrite, reorder, and re-emphasize these to fit the target job:
+- The summary section
+- Bullet point wording, emphasis, and which accomplishments are highlighted first
+- Which skills are listed prominently vs. lower down
+- Phrasing of responsibilities and achievements (never invent new ones — only reframe real ones)
+
+Other rules:
+- Add relevant keywords from the job description naturally, only where truthful
+- Strengthen bullet points with measurable impact where the original already implies it
+- Do not invent experience, skills, titles, employers, or certifications
 - Never use em dashes or double hyphens (— or --) anywhere in the resume; use a comma or period instead
 - Write every line the way a person would actually write their own resume, not the way an AI summarizes one
 
@@ -281,10 +296,15 @@ export async function reviseText(
   kind: 'resume' | 'cover letter',
   onUsage?: UsageCallback
 ): Promise<string> {
-  const prompt = `You are helping a candidate revise their ${kind}. Apply the requested change below.
-Keep everything else intact and truthful — only change what the request asks for.
-Do not invent experience, skills, or achievements that aren't already present.
+  const anchorRule =
+    kind === 'resume'
+      ? '\nUnless the request specifically asks to correct one of these, never change: full name, contact info, company/employer names, official job titles held, employment dates, education, or certifications — copy those exactly as they currently appear.\n'
+      : '';
 
+  const prompt = `You are helping a candidate revise their ${kind}. Apply the requested change below.
+Keep everything else intact and truthful, only change what the request asks for.
+Do not invent experience, skills, or achievements that aren't already present.
+${anchorRule}
 CURRENT ${kind.toUpperCase()}:
 ${currentText}
 
