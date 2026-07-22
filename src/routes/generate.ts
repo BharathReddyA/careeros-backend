@@ -5,7 +5,7 @@ import { Application } from '../models/Application';
 import { Resume } from '../models/Resume';
 import { Job } from '../models/Job';
 import { User } from '../models/User';
-import { tailorResume, generateCoverLetter } from '../services/geminiService';
+import { tailorResume, generateCoverLetter, reviseText } from '../services/geminiService';
 import { trackTokenUsage } from '../lib/tokenUsage';
 
 const router = Router();
@@ -31,6 +31,11 @@ const TailorSchema = z.object({
 
 const CoverLetterSchema = z.object({
   applicationId: z.string(),
+});
+
+const ReviseSchema = z.object({
+  applicationId: z.string(),
+  instruction: z.string().min(1),
 });
 
 router.post('/tailor', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -149,6 +154,48 @@ router.post('/coverletter', authMiddleware, async (req: AuthRequest, res: Respon
   await application.save();
 
   res.json({ applicationId: application._id, coverLetter });
+});
+
+router.post('/tailor/revise', authMiddleware, async (req: AuthRequest, res: Response) => {
+  const parsed = ReviseSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const userId = req.userId!;
+  const application = await Application.findOne({ _id: parsed.data.applicationId, userId });
+  if (!application?.tailoredResumeText) {
+    res.status(404).json({ error: 'No tailored resume to revise' });
+    return;
+  }
+
+  const revised = await reviseText(application.tailoredResumeText, parsed.data.instruction, 'resume', trackTokenUsage(userId));
+  application.tailoredResumeText = revised;
+  await application.save();
+
+  res.json({ tailoredResume: revised });
+});
+
+router.post('/coverletter/revise', authMiddleware, async (req: AuthRequest, res: Response) => {
+  const parsed = ReviseSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const userId = req.userId!;
+  const application = await Application.findOne({ _id: parsed.data.applicationId, userId });
+  if (!application?.coverLetter) {
+    res.status(404).json({ error: 'No cover letter to revise' });
+    return;
+  }
+
+  const revised = await reviseText(application.coverLetter, parsed.data.instruction, 'cover letter', trackTokenUsage(userId));
+  application.coverLetter = revised;
+  await application.save();
+
+  res.json({ coverLetter: revised });
 });
 
 export default router;

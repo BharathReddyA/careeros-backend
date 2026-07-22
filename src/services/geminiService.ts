@@ -274,3 +274,24 @@ Return plain text only, no subject line, no date, no address block.`;
 
   return generateText(prompt, onUsage);
 }
+
+export async function reviseText(
+  currentText: string,
+  instruction: string,
+  kind: 'resume' | 'cover letter',
+  onUsage?: UsageCallback
+): Promise<string> {
+  const prompt = `You are helping a candidate revise their ${kind}. Apply the requested change below.
+Keep everything else intact and truthful — only change what the request asks for.
+Do not invent experience, skills, or achievements that aren't already present.
+
+CURRENT ${kind.toUpperCase()}:
+${currentText}
+
+REQUESTED CHANGE:
+${instruction}
+
+Return the full revised ${kind} as plain text only, no commentary.`;
+
+  return generateText(prompt, onUsage);
+}
