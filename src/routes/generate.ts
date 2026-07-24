@@ -5,7 +5,7 @@ import { Application } from '../models/Application';
 import { Resume } from '../models/Resume';
 import { Job } from '../models/Job';
 import { User } from '../models/User';
-import { tailorResume, generateCoverLetter, reviseText } from '../services/geminiService';
+import { tailorResume, generateCoverLetter, generateOutreachMessage, reviseText } from '../services/geminiService';
 import { trackTokenUsage } from '../lib/tokenUsage';
 
 const router = Router();
@@ -158,6 +158,51 @@ router.post('/coverletter', authMiddleware, async (req: AuthRequest, res: Respon
   await application.save();
 
   res.json({ applicationId: application._id, coverLetter });
+});
+
+router.post('/outreach', authMiddleware, async (req: AuthRequest, res: Response) => {
+  const parsed = CoverLetterSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const userId = req.userId!;
+
+  const isPro = await checkProAccess(userId);
+  if (!isPro) {
+    res.status(402).json({
+      error: 'Outreach message generation requires CareerOS Pro.',
+      requiresPro: true,
+    });
+    return;
+  }
+
+  const application = await Application.findOne({
+    _id: parsed.data.applicationId,
+    userId,
+  }).populate<{ jobId: InstanceType<typeof Job> }>('jobId');
+
+  if (!application) {
+    res.status(404).json({ error: 'Application not found' });
+    return;
+  }
+
+  const resume = await Resume.findOne({ _id: application.resumeId, userId });
+  if (!resume) {
+    res.status(404).json({ error: 'Resume for this application not found' });
+    return;
+  }
+
+  const job = application.jobId as InstanceType<typeof Job>;
+  const { name, summary } = resume.parsedProfile;
+
+  const outreachMessage = await generateOutreachMessage(name, summary, job.title, job.company, trackTokenUsage(userId));
+
+  application.outreachMessage = outreachMessage;
+  await application.save();
+
+  res.json({ applicationId: application._id, outreachMessage });
 });
 
 router.post('/tailor/revise', authMiddleware, async (req: AuthRequest, res: Response) => {

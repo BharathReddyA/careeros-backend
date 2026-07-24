@@ -71,6 +71,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     status: 'saved',
     matchScore: match.score,
     matchReasons: match.matchReasons,
+    missingSkills: match.missingSkills,
   });
 
   res.status(201).json({ application });

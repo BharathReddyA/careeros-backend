@@ -16,8 +16,10 @@ export interface IApplication extends Document {
   status: ApplicationStatus;
   matchScore: number;
   matchReasons: string[];
+  missingSkills: string[];
   tailoredResumeText: string;
   coverLetter: string;
+  outreachMessage: string;
   notes: string;
   appliedAt: Date | null;
   followUpAt: Date | null;
@@ -36,8 +38,10 @@ const ApplicationSchema = new Schema<IApplication>(
     },
     matchScore: { type: Number, default: 0, min: 0, max: 100 },
     matchReasons: { type: [String], default: [] },
+    missingSkills: { type: [String], default: [] },
     tailoredResumeText: { type: String, default: '' },
     coverLetter: { type: String, default: '' },
+    outreachMessage: { type: String, default: '' },
     notes: { type: String, default: '' },
     appliedAt: { type: Date, default: null },
     followUpAt: { type: Date, default: null },

@@ -290,6 +290,26 @@ Return plain text only, no subject line, no date, no address block.`;
   return generateText(prompt, onUsage);
 }
 
+export async function generateOutreachMessage(
+  candidateName: string,
+  candidateSummary: string,
+  jobTitle: string,
+  company: string,
+  onUsage?: UsageCallback
+): Promise<string> {
+  const prompt = `Write a short outreach message a candidate can send to a recruiter or hiring manager at this company about this role, e.g. as a LinkedIn connection note or a brief email opener.
+- 3-5 sentences, no subject line, no greeting placeholder like "[Name]"
+- Mention the specific role and one relevant strength, not a generic pitch
+- Confident and direct, not desperate or overly formal
+
+CANDIDATE: ${candidateName}, ${candidateSummary}
+ROLE: ${jobTitle} at ${company}
+
+Return plain text only.`;
+
+  return generateText(prompt, onUsage);
+}
+
 export async function reviseText(
   currentText: string,
   instruction: string,
